@@ -82,7 +82,7 @@ public static class Program
         return hex.ToString();
     }
 
-    static Part Strategy2(byte[] lineArray)
+    static Part Strategy2(byte[] lineArray, byte[] previous)
     {
         var partNumberRegex = new Regex("[^a-zA-Z0-9 -]");
         var splitLine = SplitArray(lineArray, new byte[] { 0x81, 0x8B, 0x34, 0x01 });
@@ -97,13 +97,13 @@ public static class Program
         var price = Convert.ToInt32(priceAsHex, 16) / 100d;
 
         Console.WriteLine(lineArray.Length);
-        var discountGroup = Encoding.UTF8.GetString(new byte[] { splitLine[1][6] });
+        var discountGroup = Encoding.UTF8.GetString(new byte[] { splitLine[1][5] });
         Console.WriteLine(partNumber);
         Console.WriteLine(discountGroup);
         Console.WriteLine(price);
         return new Part
         {
-            Number = partNumber,
+            Number = $"\t{partNumber}",
             DiscountGroup = discountGroup,
             Price = price,
             PriceStartDate = DateTime.UtcNow
@@ -127,7 +127,7 @@ public static class Program
 
             try
             {
-                var deserializedPart = Strategy2(array);
+                var deserializedPart = Strategy2(array, previous);
                 if (deserializedPart != null)
                 {
                     parts.Add(deserializedPart);
@@ -149,6 +149,7 @@ public static class Program
 
             }
             Console.WriteLine($"Processed: {processedLinesCounter} Unproccessed: {unproccessedLinesCounter}");
+            previous = array;
         }
         File.WriteAllLines("parts.csv", parts.Select(x => x.ToString()));
         File.WriteAllLines("unprocessed.csv", uprocessedLines);
@@ -163,6 +164,6 @@ class Part
 
     public override string ToString()
     {
-        return $"{Number},{Price},{PriceStartDate.ToString("s")},{DiscountGroup}";
+        return $"{Number},{Price},{DiscountGroup}";
     }
 }

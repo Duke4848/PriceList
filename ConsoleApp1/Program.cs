@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 public static class Program
 {
 
-    static byte[][] Separate(byte[] source, byte[] separator)
+    static byte[][] SplitArray(byte[] source, byte[] separator)
     {
         var Parts = new List<byte[]>();
         var Index = 0;
@@ -74,46 +74,84 @@ public static class Program
         return null;
     }
 
+    static string ByteArrayToString(byte[] ba)
+    {
+        StringBuilder hex = new StringBuilder(ba.Length * 2);
+        foreach (byte b in ba)
+            hex.AppendFormat("{0:x2} ", b);
+        return hex.ToString();
+    }
+
+    static Part Strategy2(byte[] lineArray)
+    {
+        var partNumberRegex = new Regex("[^a-zA-Z0-9 -]");
+        var splitLine = SplitArray(lineArray, new byte[] { 0x81, 0x8B, 0x34, 0x01 });
+        if (splitLine.Length != 2)
+        {
+            Console.WriteLine(ByteArrayToString(lineArray));
+            throw new Exception("BRAK DATY");
+        }
+        var partContainingNumberPart = Encoding.UTF8.GetString(splitLine[0]);
+        var partNumber = partNumberRegex.Replace(partContainingNumberPart, "");
+        var priceAsHex = BitConverter.ToString(splitLine[1].SubArray(0, 4).Reverse().ToArray()).Replace("-", string.Empty); ;
+        var price = Convert.ToInt32(priceAsHex, 16) / 100d;
+
+        Console.WriteLine(lineArray.Length);
+        var discountGroup = Encoding.UTF8.GetString(new byte[] { splitLine[1][6] });
+        Console.WriteLine(partNumber);
+        Console.WriteLine(discountGroup);
+        Console.WriteLine(price);
+        return new Part
+        {
+            Number = partNumber,
+            DiscountGroup = discountGroup,
+            Price = price,
+            PriceStartDate = DateTime.UtcNow
+        };
+    }
+
+
     public static void Main(string[] args)
     {
         var inputBytes = File.ReadAllBytes("FPREIS.BIN");
-        byte[] delimeter = { 0xF4 };
-        var splitInput = Separate(inputBytes, delimeter);
+        byte[] delimeter = { 0x01, 0xF4 };
+        var splitInput = SplitArray(inputBytes, delimeter);
 
 
         var parts = new List<Part>();
-        var uprocessed = new List<string>();
-        int processedCounter = 0, unproccessedCounter = 0;
+        var uprocessedLines = new List<string>();
+        int processedLinesCounter = 0, unproccessedLinesCounter = 0;
+        byte[] previous = null;
         foreach (var array in splitInput)
         {
 
             try
             {
-                var deserializedPart = Strategy1(array);
+                var deserializedPart = Strategy2(array);
                 if (deserializedPart != null)
                 {
                     parts.Add(deserializedPart);
                 }
                 else
                 {
-                    uprocessed.Add(Encoding.UTF8.GetString(array));
+                    uprocessedLines.Add(Encoding.UTF8.GetString(array));
                 }
-                processedCounter++;
+                processedLinesCounter++;
             }
             catch (Exception ex)
             {
-                uprocessed.Add(Environment.NewLine);
-                uprocessed.Add(Encoding.UTF8.GetString(array));
-                uprocessed.Add(ex.Message);
-                uprocessed.Add(Environment.NewLine);
-                unproccessedCounter++;
-                Console.WriteLine(unproccessedCounter);
+                uprocessedLines.Add(Environment.NewLine);
+                uprocessedLines.Add(Encoding.UTF8.GetString(array));
+                uprocessedLines.Add(ex.Message);
+                uprocessedLines.Add(Environment.NewLine);
+                unproccessedLinesCounter++;
+                Console.WriteLine(unproccessedLinesCounter);
 
             }
-            Console.WriteLine($"Processed: {processedCounter} Unproccessed: {unproccessedCounter}");
+            Console.WriteLine($"Processed: {processedLinesCounter} Unproccessed: {unproccessedLinesCounter}");
         }
         File.WriteAllLines("parts.csv", parts.Select(x => x.ToString()));
-        File.WriteAllLines("unprocessed.csv", uprocessed);
+        File.WriteAllLines("unprocessed.csv", uprocessedLines);
     }
 }
 class Part
@@ -125,6 +163,6 @@ class Part
 
     public override string ToString()
     {
-        return $"{Number},{Price},{PriceStartDate},{DiscountGroup}";
+        return $"{Number},{Price},{PriceStartDate.ToString("s")},{DiscountGroup}";
     }
 }

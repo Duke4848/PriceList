@@ -1,48 +1,36 @@
 ﻿using ConsoleApp1;
+using ConsoleApp1.Helpers;
+using ConsoleApp1.Modesl;
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 
 public static class Program
 {
-    public static Dictionary<int, int> map = new();
-    static byte[][] SplitArray(byte[] source, byte[] separator)
+    public static Dictionary<int, int> CountersDictionary = new();
+    public static Dictionary<PartResult, int> PartResultCountersDictionary = new();
+
+    public static void UpdateCountersDictionary<T>(Dictionary<T, int> dictionary, T key)
     {
-        var Parts = new List<byte[]>();
-        var Index = 0;
-        byte[] Part;
-        for (var I = 0; I < source.Length; ++I)
+        if (!dictionary.ContainsKey(key))
         {
-            if (Equals(source, separator, I))
-            {
-                Part = new byte[I - Index];
-                Array.Copy(source, Index, Part, 0, Part.Length);
-                Parts.Add(Part);
-                Index = I + separator.Length;
-                I += separator.Length - 1;
-            }
+            dictionary[key] = 1;
         }
-        Part = new byte[source.Length - Index];
-        Array.Copy(source, Index, Part, 0, Part.Length);
-        Parts.Add(Part);
-        return Parts.ToArray();
+        else
+        {
+            dictionary[key]++;
+        }
     }
 
-    static bool Equals(byte[] source, byte[] separator, int index)
+    public static void DisplayDictionary<T>(Dictionary<T, int> dictionary)
     {
-        for (int i = 0; i < separator.Length; ++i)
-            if (index + i >= source.Length || source[index + i] != separator[i])
-                return false;
-        return true;
+        foreach (var keyValuePair in dictionary)
+        {
+            Console.WriteLine(keyValuePair.Key + " -> " + keyValuePair.Value);
+        }
     }
 
 
-    static string Reverse(string s)
-    {
-        char[] charArray = s.ToCharArray();
-        Array.Reverse(charArray);
-        return new string(charArray);
-    }
     static string ByteArrayToString(byte[] ba)
     {
         StringBuilder hex = new StringBuilder(ba.Length * 2);
@@ -51,39 +39,40 @@ public static class Program
         return hex.ToString();
     }
 
-    static Part Strategy2(byte[] lineArray, byte[] previousArray, Part previousPart)
+    static Tuple<Part, PartResult> ParseLineArray(byte[] lineArray, byte[] previousArray, Part previousPart)
     {
+
+        var partResult = PartResult.Success;
         var partNumberRegex = new Regex("[^a-zA-Z0-9 -]");
 
-        var splitLine = SplitArray(lineArray, new byte[] { 0x81, 0x8B, 0x34, 0x01 });
-        if (!map.ContainsKey(splitLine.Length))
+        var splitLine = ArrayHelpers.SplitArray(lineArray, new byte[] { 0x81, 0x8B, 0x34, 0x01 });
+        UpdateCountersDictionary(CountersDictionary, splitLine.Length);
+
+        if (splitLine.Length == 1 && previousArray != null)
         {
-            map[splitLine.Length] = 1;
-        }
-        else
-        {
-            map[splitLine.Length]++;
-        }
-        if (splitLine.Length != 2)
-        {
-            if (splitLine.Length == 1 && previousArray != null)
+
+            splitLine = new byte[][] { null, splitLine[0] };
+            var previousSplitLine = ArrayHelpers.SplitArray(previousArray, new byte[] { 0x81, 0x8B, 0x34, 0x01 });
+
+            if (previousSplitLine.Length == 1 && previousPart == null)
             {
-                splitLine = new byte[][] { null, splitLine[0] };
-                var previousSplitLine = SplitArray(previousArray, new byte[] { 0x81, 0x8B, 0x34, 0x01 });
-                if(previousSplitLine.Length == 1)
-                {
-                    //numer czesci bedzie w poprzedniej tablicy wystarczy podmiecni znaki string.empty
-                }
+                partResult = PartResult.PreviousLineJoinSuccess;
+                splitLine[0] = previousSplitLine[0];
             }
             else
             {
-                Console.WriteLine(ByteArrayToString(lineArray));
-                throw new Exception("BRAK DATY");
+                partResult = PartResult.NoPreviousLineJoinFailure;
+                return new Tuple<Part, PartResult>(null, partResult);
             }
+        }
+        else if (splitLine.Length != 2 || previousArray == null)
+        {
+            partResult = PartResult.Failure;
+            return new Tuple<Part, PartResult>(null, partResult);
         }
         var partContainingNumberPart = Encoding.UTF8.GetString(splitLine[0]);
         var partNumber = partNumberRegex.Replace(partContainingNumberPart, "");
-        var priceAsHex = BitConverter.ToString(splitLine[1].SubArray(0, 4).Reverse().ToArray()).Replace("-", string.Empty); ;
+        var priceAsHex = BitConverter.ToString(splitLine[1].SubArray(0, 4).Reverse().ToArray()).Replace("-", string.Empty);
         var price = Convert.ToInt32(priceAsHex, 16) / 100d;
 
         Console.WriteLine(lineArray.Length);
@@ -91,13 +80,14 @@ public static class Program
         Console.WriteLine(partNumber);
         Console.WriteLine(discountGroup);
         Console.WriteLine(price);
-        return new Part
+        return new Tuple<Part, PartResult>(new Part
         {
             Number = $"\t{partNumber}",
             DiscountGroup = discountGroup,
             Price = price,
             PriceStartDate = DateTime.UtcNow
-        };
+        },
+        partResult);
     }
 
 
@@ -105,50 +95,46 @@ public static class Program
     {
         var inputBytes = File.ReadAllBytes("FPREIS.BIN");
         byte[] delimeter = { 0x01, 0xF4 };
-        var splitInput = SplitArray(inputBytes, delimeter);
+        var splitInput = ArrayHelpers.SplitArray(inputBytes, delimeter);
 
 
         var parts = new List<Part>();
         var uprocessedLines = new List<string>();
         int processedLinesCounter = 0, unproccessedLinesCounter = 0;
+        Part deserializedPart;
+        PartResult partResult;
         byte[] previousArray = null;
-        Part deserializedPart = null;
         Part previousPart = null;
         foreach (var array in splitInput)
         {
-            try
+
+            (deserializedPart, partResult) = ParseLineArray(array, previousArray, previousPart);
+            UpdateCountersDictionary(PartResultCountersDictionary, partResult);
+            if (deserializedPart != null)
             {
-                deserializedPart = Strategy2(array, previousArray, previousPart);
-                if (deserializedPart != null)
-                {
-                    parts.Add(deserializedPart);
-                }
-                else
-                {
-                    uprocessedLines.Add(Encoding.UTF8.GetString(array));
-                }
-                processedLinesCounter++;
+                parts.Add(deserializedPart);
             }
-            catch (Exception ex)
+            else
             {
                 uprocessedLines.Add(Environment.NewLine);
                 uprocessedLines.Add(Encoding.UTF8.GetString(array));
-                uprocessedLines.Add(ex.Message);
                 uprocessedLines.Add(Environment.NewLine);
                 unproccessedLinesCounter++;
                 Console.WriteLine(unproccessedLinesCounter);
-
+                uprocessedLines.Add(Encoding.UTF8.GetString(array));
             }
+            processedLinesCounter++;
+
+
             Console.WriteLine($"Processed: {processedLinesCounter} Unproccessed: {unproccessedLinesCounter}");
             previousArray = array;
             previousPart = deserializedPart;
         }
         File.WriteAllLines("parts.csv", parts.Select(x => x.ToString()));
         File.WriteAllLines("unprocessed.csv", uprocessedLines);
-        foreach(var keyValuePair in map)
-        {
-            Console.WriteLine(keyValuePair.Key + " -> " + keyValuePair.Value);
-        }
+        DisplayDictionary(CountersDictionary);
+        Console.WriteLine(Environment.NewLine);
+        DisplayDictionary(PartResultCountersDictionary);
     }
 }
 class Part

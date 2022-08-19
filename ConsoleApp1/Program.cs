@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 
 public static class Program
 {
-
+    public static Dictionary<int, int> map = new();
     static byte[][] SplitArray(byte[] source, byte[] separator)
     {
         var Parts = new List<byte[]>();
@@ -43,37 +43,6 @@ public static class Program
         Array.Reverse(charArray);
         return new string(charArray);
     }
-
-    static Part Strategy1(byte[] array)
-    {
-        var partNumberRegex = new Regex("[^a-zA-Z0-9 -]");
-        var lastPIndex = Array.LastIndexOf<byte>(array, 0x50);
-        if (lastPIndex != -1)
-        {
-            Console.WriteLine(array.Length);
-            var discountGroup = Encoding.UTF8.GetString(array, lastPIndex, 2);
-            var priceAsHex = BitConverter.ToString(array.SubArray(lastPIndex - 4, 4).Reverse().ToArray()).Replace("-", string.Empty);
-            var x = BitConverter.ToString(array.SubArray(lastPIndex - 4, 4).ToArray()).Replace("-", string.Empty);
-            var price = Convert.ToInt32(priceAsHex, 16) / 100d;
-            //var priceStartDateAsHex = BitConverter.ToString(array.SubArray(lastPIndex - 8, 4).Reverse().ToArray()).Replace("-", string.Empty);
-            //var priceStartDateAsRawString = Convert.ToInt32(priceStartDateAsHex, 16).ToString();
-            //var priceStartDate = DateTime.ParseExact(priceStartDateAsRawString, "yyyyMMdd", CultureInfo.InvariantCulture);
-            var partContainingNumberPart = Encoding.UTF8.GetString(array.SubArray(0, lastPIndex - 8));
-            var partNumber = partNumberRegex.Replace(partContainingNumberPart, "");
-            //Console.WriteLine(partNumber);
-            //Console.WriteLine(discountGroup);
-            //Console.WriteLine(price);
-            return new Part
-            {
-                Number = partNumber,
-                DiscountGroup = discountGroup,
-                Price = price,
-                PriceStartDate = DateTime.UtcNow
-            };
-        }
-        return null;
-    }
-
     static string ByteArrayToString(byte[] ba)
     {
         StringBuilder hex = new StringBuilder(ba.Length * 2);
@@ -82,14 +51,35 @@ public static class Program
         return hex.ToString();
     }
 
-    static Part Strategy2(byte[] lineArray, byte[] previous)
+    static Part Strategy2(byte[] lineArray, byte[] previousArray, Part previousPart)
     {
         var partNumberRegex = new Regex("[^a-zA-Z0-9 -]");
+
         var splitLine = SplitArray(lineArray, new byte[] { 0x81, 0x8B, 0x34, 0x01 });
+        if (!map.ContainsKey(splitLine.Length))
+        {
+            map[splitLine.Length] = 1;
+        }
+        else
+        {
+            map[splitLine.Length]++;
+        }
         if (splitLine.Length != 2)
         {
-            Console.WriteLine(ByteArrayToString(lineArray));
-            throw new Exception("BRAK DATY");
+            if (splitLine.Length == 1 && previousArray != null)
+            {
+                splitLine = new byte[][] { null, splitLine[0] };
+                var previousSplitLine = SplitArray(previousArray, new byte[] { 0x81, 0x8B, 0x34, 0x01 });
+                if(previousSplitLine.Length == 1)
+                {
+                    //numer czesci bedzie w poprzedniej tablicy wystarczy podmiecni znaki string.empty
+                }
+            }
+            else
+            {
+                Console.WriteLine(ByteArrayToString(lineArray));
+                throw new Exception("BRAK DATY");
+            }
         }
         var partContainingNumberPart = Encoding.UTF8.GetString(splitLine[0]);
         var partNumber = partNumberRegex.Replace(partContainingNumberPart, "");
@@ -121,13 +111,14 @@ public static class Program
         var parts = new List<Part>();
         var uprocessedLines = new List<string>();
         int processedLinesCounter = 0, unproccessedLinesCounter = 0;
-        byte[] previous = null;
+        byte[] previousArray = null;
+        Part deserializedPart = null;
+        Part previousPart = null;
         foreach (var array in splitInput)
         {
-
             try
             {
-                var deserializedPart = Strategy2(array, previous);
+                deserializedPart = Strategy2(array, previousArray, previousPart);
                 if (deserializedPart != null)
                 {
                     parts.Add(deserializedPart);
@@ -149,10 +140,15 @@ public static class Program
 
             }
             Console.WriteLine($"Processed: {processedLinesCounter} Unproccessed: {unproccessedLinesCounter}");
-            previous = array;
+            previousArray = array;
+            previousPart = deserializedPart;
         }
         File.WriteAllLines("parts.csv", parts.Select(x => x.ToString()));
         File.WriteAllLines("unprocessed.csv", uprocessedLines);
+        foreach(var keyValuePair in map)
+        {
+            Console.WriteLine(keyValuePair.Key + " -> " + keyValuePair.Value);
+        }
     }
 }
 class Part

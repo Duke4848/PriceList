@@ -9,7 +9,7 @@ public static class Program
 {
     public static Dictionary<int, int> CountersDictionary = new();
     public static Dictionary<PartResult, int> PartResultCountersDictionary = new();
-
+    private static byte[] DateDelimiter = new byte[] { 0x1D, 0x8B, 0x34, 0x01 };
     public static void UpdateCountersDictionary<T>(Dictionary<T, int> dictionary, T key)
     {
         if (!dictionary.ContainsKey(key))
@@ -45,14 +45,14 @@ public static class Program
         var partResult = PartResult.Success;
         var partNumberRegex = new Regex("[^a-zA-Z0-9 -]");
 
-        var splitLine = ArrayHelpers.SplitArray(lineArray, new byte[] { 0x81, 0x8B, 0x34, 0x01 });
+        var splitLine = ArrayHelpers.SplitArray(lineArray, DateDelimiter);
         UpdateCountersDictionary(CountersDictionary, splitLine.Length);
 
         if (splitLine.Length == 1 && previousArray != null)
         {
 
             splitLine = new byte[][] { null, splitLine[0] };
-            var previousSplitLine = ArrayHelpers.SplitArray(previousArray, new byte[] { 0x81, 0x8B, 0x34, 0x01 });
+            var previousSplitLine = ArrayHelpers.SplitArray(previousArray, DateDelimiter);
 
             if (previousSplitLine.Length == 1 && previousPart == null)
             {

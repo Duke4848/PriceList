@@ -43,7 +43,7 @@ public static class Program
     {
 
         var partResult = PartResult.Success;
-        var partNumberRegex = new Regex("[^a-zA-Z0-9 -]");
+        var partNumberRegex = new Regex("[^a-zA-Z0-9-]");
 
         var splitLine = ArrayHelpers.SplitArray(lineArray, DateDelimiter);
         UpdateCountersDictionary(CountersDictionary, splitLine.Length);

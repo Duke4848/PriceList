@@ -50,7 +50,7 @@ public static class Program
 
         if (splitLine.Length == 1 && previousArray != null)
         {
-
+            splitLine[0] = splitLine[0].Prepend<byte>(0xF4).ToArray();
             splitLine = new byte[][] { null, splitLine[0] };
             var previousSplitLine = ArrayHelpers.SplitArray(previousArray, DateDelimiter);
 

@@ -41,7 +41,6 @@ public static class Program
 
     static Tuple<Part, PartResult> ParseLineArray(byte[] lineArray, byte[] previousArray, Part previousPart)
     {
-
         var partResult = PartResult.Success;
         var partNumberRegex = new Regex("[^a-zA-Z0-9-]");
 
@@ -91,8 +90,23 @@ public static class Program
     }
 
 
+    public static byte[] GetDate(string msg)
+    {
+        try
+        {
+            Console.WriteLine(msg);
+            var inputDate = BitConverter.GetBytes(Convert.ToInt32(Console.ReadLine()));
+            return inputDate;
+        }
+        catch
+        {
+            return GetDate("zly format");
+        }
+    }
+
     public static void Main(string[] args)
     {
+        DateDelimiter = GetDate("Podaj date w formacie YYYYMMDD");
         var inputBytes = File.ReadAllBytes("FPREIS.BIN");
         byte[] delimeter = { 0x01, 0xF4 };
         var splitInput = ArrayHelpers.SplitArray(inputBytes, delimeter);
